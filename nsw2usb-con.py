@@ -15,37 +15,52 @@ INTERFACE      = 1
 INIT_REPORT    = bytes([0x03, 0x91, 0x00, 0x0D, 0x00, 0x08, 0x00, 0x00,
                         0x01, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
 
-# find the device
-dev = next((d for d in usb.core.find(find_all=True)
-            if d.idVendor == VID_NINTENDO and d.idProduct in (PID_SW2_PROCON, PID_SW2_NGCCON)), None)
-if not dev:
-    sys.exit("error: device not found")
+# set player led command
+PLED_REPORT    = bytes([0x09, 0x91, 0x00, 0x07, 0x00, 0x08, 0x00, 0x00,
+                        0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
 
-# claim iface 1
-dev.set_configuration()
-if dev.is_kernel_driver_active(INTERFACE):
-    dev.detach_kernel_driver(INTERFACE)
-usb.util.claim_interface(dev, INTERFACE)
+def main():
+    # find the controller
+    dev = next((d for d in usb.core.find(find_all=True)
+                if d.idVendor == VID_NINTENDO
+                and d.idProduct in (PID_SW2_PROCON, PID_SW2_NGCCON)), None)
+    if not dev:
+        sys.exit("error: controller not found")
 
-# locate and send on the out endpoint
-intf = dev.get_active_configuration()[(INTERFACE, 0)]
-ep_out = next(
-    (e for e in intf.endpoints()
-     if usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT), None)
-if not ep_out:
-    sys.exit("error: out endpoint not found")
+    # configure + claim
+    dev.set_configuration()
+    if dev.is_kernel_driver_active(INTERFACE):
+        try:
+            dev.detach_kernel_driver(INTERFACE)
+        except usb.core.USBError:
+            pass
+    usb.util.claim_interface(dev, INTERFACE)
 
-ep_out.write(INIT_REPORT)
-print("report sent; press ctrl-c to exit")
+    # locate bulk-out endpoint
+    intf   = dev.get_active_configuration()[(INTERFACE, 0)]
+    ep_out = next((e for e in intf.endpoints()
+                 if usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
+                 and e.bmAttributes == usb.util.ENDPOINT_TYPE_BULK), None)
+    if not ep_out:
+        sys.exit("error: bulk-out endpoint not found")
 
-try:
-    while True:
-        time.sleep(1)
-except KeyboardInterrupt:
-    pass
-finally:
-    usb.util.release_interface(dev, INTERFACE)
+    ep_out.write(INIT_REPORT)
+    print("init report sent..")
+    time.sleep(0.05)
+    ep_out.write(PLED_REPORT)
+    print("player 1 led set..")
+    print("press ctrl-c to exit")
     try:
-        dev.attach_kernel_driver(INTERFACE)
-    except:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
         pass
+    finally:
+        usb.util.release_interface(dev, INTERFACE)
+        try:
+            dev.attach_kernel_driver(INTERFACE)
+        except:
+            pass
+
+if __name__ == "__main__":
+    main()
