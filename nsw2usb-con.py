@@ -17,7 +17,7 @@ INIT_REPORT    = bytes([0x03, 0x91, 0x00, 0x0D, 0x00, 0x08, 0x00, 0x00,
 
 # set player led command
 PLED_REPORT    = bytes([0x09, 0x91, 0x00, 0x07, 0x00, 0x08, 0x00, 0x00,
-                        0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
+                        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
 
 def main():
     # find the controller
@@ -27,14 +27,22 @@ def main():
     if not dev:
         sys.exit("error: controller not found")
 
-    # configure + claim
-    dev.set_configuration()
-    if dev.is_kernel_driver_active(INTERFACE):
-        try:
+    # detach if bound
+    try:
+        if dev.is_kernel_driver_active(INTERFACE):
             dev.detach_kernel_driver(INTERFACE)
-        except usb.core.USBError:
-            pass
-    usb.util.claim_interface(dev, INTERFACE)
+    except usb.core.USBError as e:
+        sys.exit(f"error: could not detach kernel driver: {e}")
+
+    try:
+        dev.set_configuration()
+    except usb.core.USBError as e:
+        sys.exit(f"error: could not set configuration: {e}")
+
+    try:
+        usb.util.claim_interface(dev, INTERFACE)
+    except usb.core.USBError as e:
+        sys.exit(f"error: could not claim interface {INTERFACE}: {e}")
 
     # locate bulk-out endpoint
     intf   = dev.get_active_configuration()[(INTERFACE, 0)]
