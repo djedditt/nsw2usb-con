@@ -19,7 +19,22 @@ INIT_REPORT    = bytes([0x03, 0x91, 0x00, 0x0D, 0x00, 0x08, 0x00, 0x00,
 PLED_REPORT    = bytes([0x09, 0x91, 0x00, 0x07, 0x00, 0x08, 0x00, 0x00,
                         0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
 
+def release_and_attach(dev, interface, attach=True):
+    """Release the interface and reattach the kernel driver."""
+    usb.util.release_interface(dev, interface)
+    if attach:
+        try:
+            dev.attach_kernel_driver(interface)
+        except usb.core.USBError as e:
+            sys.exit(f"error: could not reattach kernel driver: {e}")
+
+
 def main():
+    if '-h' in sys.argv or '--help' in sys.argv:
+        print(f"usage: {sys.argv[0]} [-x] [-A]")
+        print("  -x: exit after sending init report")
+        print("  -A: do not reattach kernel driver")
+        sys.exit(0)
     # find the controller
     dev = next((d for d in usb.core.find(find_all=True)
                 if d.idVendor == VID_NINTENDO
@@ -57,18 +72,17 @@ def main():
     time.sleep(0.05)
     ep_out.write(PLED_REPORT)
     print("player 1 led set..")
-    print("press ctrl-c to exit")
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        usb.util.release_interface(dev, INTERFACE)
+    if '-x' not in sys.argv:
+        print("press ctrl-c to exit")
         try:
-            dev.attach_kernel_driver(INTERFACE)
-        except usb.core.USBError:
-            sys.exit("error: could not reattach kernel driver")
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            release_and_attach(dev, INTERFACE, attach='-A' not in sys.argv)
+    else:
+        release_and_attach(dev, INTERFACE)
 
 if __name__ == "__main__":
     main()
