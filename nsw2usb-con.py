@@ -67,8 +67,8 @@ def main():
         usb.util.release_interface(dev, INTERFACE)
         try:
             dev.attach_kernel_driver(INTERFACE)
-        except:
-            pass
+        except usb.core.USBError:
+            sys.exit("error: could not reattach kernel driver")
 
 if __name__ == "__main__":
     main()
